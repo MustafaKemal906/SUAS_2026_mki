@@ -21,13 +21,10 @@ def local_to_gps(x, y, home_lat, home_lon):
 def calculate_flight_parameters(h, s_w, f, i_w, i_h, front_overlap, side_overlap):
     gsd_m_px = (h * s_w) / (f * i_w)
     gsd_cm_px = gsd_m_px * 100.0
-    
     footprint_w = i_w * gsd_m_px
     footprint_h = i_h * gsd_m_px
-    
     line_spacing = footprint_w * (1.0 - (side_overlap / 100.0))
     photo_dist = footprint_h * (1.0 - (front_overlap / 100.0))
-    
     return gsd_cm_px, line_spacing, photo_dist
 
 def generate_enhanced_path(polygon_gps, home_lat, home_lon, line_spacing, interpolation_dist, altitude, speed):
@@ -75,7 +72,6 @@ def generate_enhanced_path(polygon_gps, home_lat, home_lon, line_spacing, interp
             for d in dists:
                 point = line.interpolate(d)
                 lat, lon = local_to_gps(point.x, point.y, home_lat, home_lon)
-                
                 waypoints.append({
                     "latitude": lat,
                     "longitude": lon,
@@ -111,28 +107,95 @@ def filter_edge_waypoints(waypoints, polygon_gps, home_lat, home_lon, margin_dis
             
     return valid_waypoints, edge_waypoints
 
+def optimize_path_start(waypoints, drone_lat, drone_lon, home_lat, home_lon):
+    if not waypoints:
+        return []
+        
+    rows = []
+    current_row = [waypoints[0]]
+    
+    for i in range(1, len(waypoints)):
+        prev_wp = waypoints[i-1]
+        curr_wp = waypoints[i]
+        
+        _, y1 = gps_to_local(prev_wp["latitude"], prev_wp["longitude"], home_lat, home_lon)
+        _, y2 = gps_to_local(curr_wp["latitude"], curr_wp["longitude"], home_lat, home_lon)
+        
+        if abs(y2 - y1) > 1.0:
+            rows.append(current_row)
+            current_row = [curr_wp]
+        else:
+            current_row.append(curr_wp)
+    rows.append(current_row)
+    
+    for r in rows:
+        r.sort(key=lambda wp: gps_to_local(wp["latitude"], wp["longitude"], home_lat, home_lon)[0])
+        
+    corners = {
+        "bottom_left": rows[0][0],
+        "bottom_right": rows[0][-1],
+        "top_left": rows[-1][0],
+        "top_right": rows[-1][-1]
+    }
+    
+    drone_x, drone_y = gps_to_local(drone_lat, drone_lon, home_lat, home_lon)
+    
+    best_corner = None
+    min_dist = float('inf')
+    
+    for name, wp in corners.items():
+        wp_x, wp_y = gps_to_local(wp["latitude"], wp["longitude"], home_lat, home_lon)
+        dist = math.hypot(wp_x - drone_x, wp_y - drone_y)
+        if dist < min_dist:
+            min_dist = dist
+            best_corner = name
+            
+    optimized_waypoints = []
+    
+    if best_corner == "bottom_left":
+        for i, r in enumerate(rows):
+            optimized_waypoints.extend(r if i % 2 == 0 else r[::-1])
+            
+    elif best_corner == "bottom_right":
+        for i, r in enumerate(rows):
+            optimized_waypoints.extend(r[::-1] if i % 2 == 0 else r)
+            
+    elif best_corner == "top_left":
+        rows.reverse()
+        for i, r in enumerate(rows):
+            optimized_waypoints.extend(r if i % 2 == 0 else r[::-1])
+            
+    elif best_corner == "top_right":
+        rows.reverse()
+        for i, r in enumerate(rows):
+            optimized_waypoints.extend(r[::-1] if i % 2 == 0 else r)
+            
+    print(f"\n[OPTIMIZATION] Rota başlangıcı güncellendi -> {best_corner.replace('_', ' ').upper()}")
+    return optimized_waypoints
+
 if __name__ == "__main__":
+    
     search_boundary = [
         [36.216341, -96.010424],
         [36.21675, -96.00755],
-        [36.218054, -96.007835], 
-        [36.217645, -96.010709], 
+        [36.218054, -96.007835],
+        [36.217645, -96.010709]
     ]
     
     HOME_LAT = 36.216341
     HOME_LON = -96.010424
     
-    ALTITUDE = 70.0
-    SPEED = 5.0
-    CAMERA_MARGIN = 10.0
+    ALTITUDE = 70.0            
+    SPEED = 5.0                
+    CAMERA_MARGIN = 10.0       
 
-    SENSOR_WIDTH = 3.674
-    FOCAL_LENGTH = 3.04
-    IMAGE_WIDTH = 3280
-    IMAGE_HEIGHT = 2464
+    SENSOR_WIDTH = 3.674       
+    FOCAL_LENGTH = 3.04        
+    IMAGE_WIDTH = 3280         
+    IMAGE_HEIGHT = 2464        
     
-    FRONT_OVERLAP = 70.0
-    SIDE_OVERLAP = 70.0
+    FRONT_OVERLAP = 70.0       
+    SIDE_OVERLAP = 70.0        
 
     gsd, line_spacing, photo_dist = calculate_flight_parameters(
         ALTITUDE, SENSOR_WIDTH, FOCAL_LENGTH, IMAGE_WIDTH, IMAGE_HEIGHT, FRONT_OVERLAP, SIDE_OVERLAP
@@ -144,6 +207,12 @@ if __name__ == "__main__":
     
     mission_waypoints, ignored_waypoints = filter_edge_waypoints(
         raw_waypoints, search_boundary, HOME_LAT, HOME_LON, CAMERA_MARGIN
+    )
+
+    DRONE_LAT = 36.217000
+    DRONE_LON = -96.013000
+    mission_waypoints = optimize_path_start(
+        mission_waypoints, DRONE_LAT, DRONE_LON, HOME_LAT, HOME_LON
     )
     
     output_file = "mission_waypoints.json"
