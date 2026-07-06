@@ -49,7 +49,7 @@ int main() {
     if (controller.arm_and_takeoff()) {
         // Kalkıştan sonra drone'un stabilize olması için kısa bir bekleme
         std::cout << "Havalimanı güvenliği sağlanıyor (5 sn bekleme)..." << std::endl;
-        std::this_thread::sleep_for(5s);
+        std::this_thread::sleep_for(5s); // Süreyi 15 saniyeye çıkarın
 
         // 6. Haritalama Görevini Başlat
         std::cout << "📸 Haritalama görevi BASLATILIYOR..." << std::endl;
