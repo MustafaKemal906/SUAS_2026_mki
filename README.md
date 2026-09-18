@@ -1,5 +1,11 @@
 # Pipline 
 
+Bu proje, belirlenen bir bölgenin drone ile otonom olarak taranması, waypointlere göre görüntü toplanması ve elde edilen fotoğrafların OpenDroneMap (ODM) kullanılarak haritaya dönüştürülmesi için oluşturulmuş uçtan uca bir haritalama pipeline'ıdır.
+
+Süreç temel olarak **waypoint üretimi → görüntü toplama → drone görevinin yürütülmesi → ODM ile harita oluşturma** adımlarından oluşur. Her aşama ayrı bir bileşen tarafından yürütülür ve çıktılar bir sonraki aşamanın girdisi olarak kullanılır.
+
+Bu algoritma ile oluşturulmuş gerçek bir mapping örneği ana directory de görülmektedir.
+
 ## 1) Waypointlerin Üretilmesi
 
 Öncelikle `waypoint py` klasöründeki `waypoints_final.py` dosyası yürütülür ve output olarak:
